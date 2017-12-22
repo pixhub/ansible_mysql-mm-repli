@@ -1,0 +1,60 @@
+---
+
+- name: Create MySQL User for Replication
+  mysql_user:
+    name: "{{ replica_user_name }}"
+    host: '%'
+    password: "{{ replica_user_password }}"
+    priv: '*.*:ALL,GRANT'
+    state: present
+
+
+- name: Register GetMaster File and Position of Master1
+  mysql_replication:
+    mode: getmaster
+  register: master1_log
+  when: ansible_hostname|lower == "mysql1"
+
+
+- name: Register GetMaster File and Position of Master2
+  mysql_replication:
+    mode: getmaster
+  register: master2_log
+  when: ansible_hostname|lower == "mysql2"
+
+
+- name: Exchange Facts from Master1 to Master2
+  set_fact: master_log="{{ hostvars[groups['databases'][0]]['master1_log'] }}"
+  when: ansible_hostname|lower == "mysql2"
+
+
+- name: Exchange Facts from Master2 to Master1
+  set_fact: master_log="{{ hostvars[groups['databases'][1]]['master2_log'] }}"
+  when: ansible_hostname|lower == "mysql1"
+
+
+- name: Configure Master Replication on Master1
+  mysql_replication:
+    mode: changemaster
+    master_host: "{{ master1 }}"
+    master_user: "{{ replica_user_name }}"
+    master_password: "{{ replica_user_password }}"
+    master_log_file: "{{ master_log.File }}"
+    master_log_pos: "{{ master_log.Position }}"
+  when: ansible_hostname == "mysql2"
+
+
+- name: Configure Master Replication on Master1
+  mysql_replication:
+    mode: changemaster
+    master_host: "{{ master2 }}"
+    master_user: "{{ replica_user_name }}"
+    master_password: "{{ replica_user_password }}"
+    master_log_file: "{{ master_log.File }}"
+    master_log_pos: "{{ master_log.Position }}"
+  when: ansible_hostname == "mysql1"
+
+
+- name: Starting Replication
+  mysql_replication:
+    mode: startslave

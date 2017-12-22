@@ -1,0 +1,80 @@
+---
+
+- name: Create MySQL User for Replication
+  mysql_user:
+    name: "{{ replica_user_name }}"
+    host: '%'
+    password: "{{ replica_user_password }}"
+    priv: '*.*:ALL,GRANT'
+    state: present
+
+
+- name: Register Master1 File and Position
+  mysql_replication:
+    mode: getmaster
+  register: master1_status
+  when: "'master1' in group_names"
+
+
+- name: Register Master2 File and Position
+  mysql_replication:
+    mode: getmaster
+  register: master2_status
+  when: "'master2' in group_names"
+
+
+- name: Set Master2 Vars to Master1
+  set_fact: master1_log="{{ hostvars[groups['databases'][1]]['master2_status'] }}"
+  when: "'master1' in group_names"
+
+
+- name: Set Master1 Vars to Master2
+  set_fact: master2_log="{{ hostvars[groups['databases'][0]]['master1_status'] }}"
+  when: "'master2' in group_names"
+
+
+- name: Configure Master Replication on Master1
+  mysql_replication:
+    mode: changemaster
+    master_host: "{{ master1 }}"
+    master_user: "{{ replica_user_name }}"
+    master_password: "{{ replica_user_password }}"
+    master_log_file: "{{ master2_log.File }}"
+    master_log_pos: "{{ master2_log.Position }}"
+  with_dict: "{{ master2_log }}"
+  when: "'master2' in group_names"
+
+
+- name: Configure Master Replication on Master2
+  mysql_replication:
+    mode: changemaster
+    master_host: "{{ master2 }}"
+    master_user: "{{ replica_user_name }}"
+    master_password: "{{ replica_user_password }}"
+    master_log_file: "{{ master1_log.File }}"
+    master_log_pos: "{{ master1_log.Position }}"
+  with_dict: "{{ master1_log }}"
+  when: "'master1' in group_names"
+
+
+- name: Wait before Slave Starts
+  pause:
+    seconds: 3
+
+
+- name: Starting Replication on Master1
+  mysql_replication:
+    mode: startslave
+  when: "'master1' in group_names"
+
+
+- name: Wait before Slave Start
+  pause:
+    seconds: 3
+
+
+- name: starting Replication on Master2
+  mysql_replication:
+    mode: startslave
+  when: "'master2' in group_names"
+
