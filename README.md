@@ -1,7 +1,10 @@
 Role Name
 =========
 
-A brief description of the role goes here.
+Aansible_mysql-mm-repli
+
+
+This role provides a Master/Master MySQL replication
 
 Requirements
 ------------
